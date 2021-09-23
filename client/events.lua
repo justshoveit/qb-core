@@ -37,64 +37,69 @@ end)
 
 RegisterNetEvent('QBCore:Command:GoToMarker')
 AddEventHandler('QBCore:Command:GoToMarker', function()
-	Citizen.CreateThread(function()
-		local entity = PlayerPedId()
-		if IsPedInAnyVehicle(entity, false) then
-			entity = GetVehiclePedIsUsing(entity)
-		end
-		local success = false
-		local blipFound = false
-		local blipIterator = GetBlipInfoIdIterator()
-		local blip = GetFirstBlipInfoId(8)
+    Citizen.CreateThread(function()
+        local pedId = PlayerPedId()
+        local plCoords = GetEntityCoords(pedId)
+        local ox, oy, oz = table.unpack(plCoords)
+        local waypoint = GetFirstBlipInfoId(8)
+        local entity = IsPedInAnyVehicle(pedId, false) and GetVehiclePedIsIn(pedId, false) or pedId
+        if DoesBlipExist(waypoint) == 0 then
+            return
+        end
+        local wpCoords = GetBlipInfoIdCoord(waypoint)
+        local x, y, z = table.unpack(wpCoords)
+        NetworkFadeOutEntity(entity, false, true)
+        NetworkFadeOutEntity(veh, false, true)
+        DoScreenFadeOut(250)
+        while not IsScreenFadedOut() do
+            Citizen.Wait(0)
+        end
+        for i = 1, 1001, 1 do
+            RequestCollisionAtCoord(x, y, i + 0.0)
+            SetEntityCoords(entity, x, y, i + 0.0)
 
-		while DoesBlipExist(blip) do
-			if GetBlipInfoIdType(blip) == 4 then
-				cx, cy, cz = table.unpack(Citizen.InvokeNative(0xFA7C7F0AADF25D09, blip, Citizen.ReturnResultAnyway(), Citizen.ResultAsVector())) --GetBlipInfoIdCoord(blip)
-				blipFound = true
-				break
-			end
-			blip = GetNextBlipInfoId(blipIterator)
-		end
+            NewLoadSceneStart(x, y, i + 0.0, x, y, i + 0.0, 50.0, 0)
 
-		if blipFound then
-			DoScreenFadeOut(250)
-			while IsScreenFadedOut() do
-				Citizen.Wait(250)
-			end
-			local groundFound = false
-			local yaw = GetEntityHeading(entity)
-			
-			for i = 0, 1000, 1 do
-				SetEntityCoordsNoOffset(entity, cx, cy, ToFloat(i), false, false, false)
-				SetEntityRotation(entity, 0, 0, 0, 0 ,0)
-				SetEntityHeading(entity, yaw)
-				SetGameplayCamRelativeHeading(0)
-				Citizen.Wait(0)
-				--groundFound = true
-				if GetGroundZFor_3dCoord(cx, cy, ToFloat(i), cz, false) then --GetGroundZFor3dCoord(cx, cy, i, 0, 0) GetGroundZFor_3dCoord(cx, cy, i)
-					cz = ToFloat(i)
-					groundFound = true
-					break
-				end
-			end
-			if not groundFound then
-				cz = -300.0
-			end
-			success = true
-		end
+            while IsNetworkLoadingScene() do
+                Citizen.Wait(0)
+            end
 
-		if success then
-			SetEntityCoordsNoOffset(entity, cx, cy, cz, false, false, true)
-			SetGameplayCamRelativeHeading(0)
-			if IsPedSittingInAnyVehicle(PlayerPedId()) then
-				if GetPedInVehicleSeat(GetVehiclePedIsUsing(PlayerPedId()), -1) == PlayerPedId() then
-					SetVehicleOnGroundProperly(GetVehiclePedIsUsing(PlayerPedId()))
-				end
-			end
-			--HideLoadingPromt()
-			DoScreenFadeIn(250)
-		end
-	end)
+            while not HasCollisionLoadedAroundEntity(entity) do
+                Citizen.Wait(0)
+            end
+
+            local foundGround, zPos = GetGroundZFor_3dCoord(x, y, i + 0.0, false)
+            if foundGround == 1 then
+                SetEntityCoords(entity, x, y, zPos)
+
+                DoScreenFadeIn(250)
+                while not IsScreenFadedIn() do
+                    Citizen.Wait(0)
+                end
+                NetworkFadeInEntity(entity, true)
+                return
+            end
+        end
+
+        RequestCollisionAtCoord(ox, oy, oz)
+        SetPedCoordsKeepVehicle(entity, ox, oy, oz - 1)
+        FreezeEntityPosition(entity, true)
+        while not HasCollisionLoadedAroundEntity(entity) do
+            Citizen.Wait(0)
+        end
+
+        NewLoadSceneStart(ox, oy, oz, ox, oy, oz, 50.0, 0)
+        while IsNetworkLoadingScene() do
+            Citizen.Wait(0)
+        end
+
+        FreezeEntityPosition(entity, false)
+        DoScreenFadeIn(500)
+        while not IsScreenFadedIn() do
+            Citizen.Wait(0)
+        end
+        NetworkFadeInEntity(entity, true)
+    end)
 end)
 
 -- Other stuff
